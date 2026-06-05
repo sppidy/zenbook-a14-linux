@@ -1,0 +1,258 @@
+{
+  "config":{
+    "hw_platform": ["CRD"],
+    "soc_id": ["555","635", "615", "616"]
+  },
+  "veml3328_0_platform":{
+    "owner": "sns_veml3328",
+    ".config":{
+      "owner": "sns_veml3328",
+      "bus_type":{ "type": "int", "ver": "0",
+        "data": "0"
+      },
+      "bus_instance":{ "type": "int", "ver": "0",
+        "data": "7"
+      },
+      "slave_config":{ "type": "int", "ver": "0",
+        "data": "16"
+      },
+      "min_bus_speed_khz":{ "type": "int", "ver": "0",
+        "data": "400"
+      },
+      "max_bus_speed_khz":{ "type": "int", "ver": "0",
+        "data": "400"
+      },
+      "reg_addr_type":{ "type": "int", "ver": "0",
+        "data": "0"
+      },
+      "num_rail":{ "type": "int", "ver": "0",
+        "data": "2"
+      },
+      "rail_on_state":{ "type": "int", "ver": "0",
+        "data": "2"
+      },
+      "vdd_rail":{ "type": "str", "ver": "0",
+        "data": "/pmic/client/sensor_vdd"
+      },
+      "vddio_rail":{ "type": "str", "ver": "0",
+        "data": "/pmic/client/sensor_vddio"
+      },
+      "rigid_body_type":{ "type": "int", "ver": "0",
+      "data": "0"
+      }
+    },
+    ".placement":{
+      "owner": "sns_veml3328",
+      "0":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "1":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "2":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "3":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "4":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "5":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "6":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "7":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "8":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "9":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "10":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "11":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      }
+    },
+    ".register":{
+      "owner": "sns_veml3328",
+      "0":{ "type": "flt", "ver": "50",
+        "data": "9232.0"
+      }
+    },	
+    ".cal_per_model_lux":{
+      "owner": "sns_veml3328",
+      "LG":{ "type": "flt", "ver": "50",
+        "data": "3.428"
+      },
+      "LC":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "Exp_Lux":{ "type": "flt", "ver": "50",
+        "data": "0.9898"
+      },
+      "Lh0":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Lh1":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "Ll0":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Ll1":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "Ch_min":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Ch_max":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Cl_min":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Cl_max":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Jh":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Jl":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      }
+    },
+    ".cal_per_model_cct":{
+      "owner": "sns_veml3328",
+      "Lccti0":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Lccti1":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "X1":{ "type": "flt", "ver": "50",
+        "data": "2.0"
+      },
+      "X2":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "Y1":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "E0":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "E1":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "E2":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "E3":{ "type": "flt", "ver": "50",
+        "data": "2663.5"
+      },
+      "Exp_CCT":{ "type": "flt", "ver": "50",
+        "data": "-1.58"
+      },
+      "Ecct_min":{ "type": "flt", "ver": "50",
+        "data": "2300.0"
+      },
+      "Ecct_max":{ "type": "flt", "ver": "50",
+        "data": "7000.0"
+      }
+    },
+    ".cal_per_model_xy":{
+      "owner": "sns_veml3328",
+      "A0":{ "type": "flt", "ver": "50",
+        "data": "0.1355"
+      },
+      "A1":{ "type": "flt", "ver": "50",
+        "data": "0.3287"
+      },
+      "A2":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "B0":{ "type": "flt", "ver": "50",
+        "data": "0.2548"
+      },
+      "B1":{ "type": "flt", "ver": "50",
+        "data": "0.1648"
+      },
+      "B2":{ "type": "flt", "ver": "50",
+        "data": "0.0"
+      },
+      "Dx_min":{ "type": "flt", "ver": "50",
+        "data": "0.27"
+      },
+      "Dx_max":{ "type": "flt", "ver": "50",
+        "data": "0.55"
+      },
+      "Dy_min":{ "type": "flt", "ver": "50",
+        "data": "0.1"
+      },
+      "Dy_max":{ "type": "flt", "ver": "50",
+        "data": "0.65"
+      }
+    },
+    ".cal_per_system":{
+      "owner": "sns_veml3328",
+      "C_lux":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      },
+      "C_ccti":{ "type": "flt", "ver": "50",
+        "data": "1.0"
+      }
+    },
+    ".cal_setting":{
+      "owner": "sns_veml3328",
+      "C_lux_upper_bound":{ "type": "flt", "ver": "0",
+        "data": "3.0"
+      },
+      "C_lux_lower_bound":{ "type": "flt", "ver": "0",
+        "data": "0.35"
+      },
+      "C_ccti_upper_bound":{ "type": "flt", "ver": "0",
+        "data": "3.0"
+      },
+      "C_ccti_lower_bound":{ "type": "flt", "ver": "0",
+        "data": "0.35"
+      },		  
+      "Rcenter":{ "type": "flt", "ver": "0",
+        "data": "424.0"
+      },
+      "Gcenter":{ "type": "flt", "ver": "0",
+        "data": "660.0"
+      },
+      "Bcenter":{ "type": "flt", "ver": "0",
+        "data": "240.0"
+      },
+      "Ccenter":{ "type": "flt", "ver": "0",
+        "data": "1250.0"
+      }
+    },
+    ".cal_result":{
+      "owner": "sns_veml3328",
+      "result_code":{ "type": "flt", "ver": "0",
+        "data": "255.0"
+      },
+      "Rtest":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "Gtest":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "Btest":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      },
+      "Ctest":{ "type": "flt", "ver": "0",
+        "data": "0.0"
+      }
+    }
+  }
+}

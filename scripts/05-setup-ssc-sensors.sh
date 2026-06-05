@@ -73,19 +73,25 @@ else
 	warn "missing $DROPINS — the SSC will not come up cleanly without the drop-ins"
 fi
 
-# --- 4. lay down the SSC data tree (device/vendor data — never committed) -----
-# The ADSP sensor PD needs the full tree: the sensor config JSONs, the generated
-# registry, sns_reg.conf/sns_reg_version, socinfo, the RFSA dsp libs, and the
-# secure-DB seed. On the A14 droid-juicer (an Android extractor) cannot generate
-# this — it comes from the device's Windows persist. Two sources, in order:
-#   (a) a capture from a working A14  (scripts/capture-ssc-data.sh -> ssc-data/)
-#   (b) the Windows persist tree       (SSC_PERSIST_SRC or under WINDOWS_MOUNT)
+# --- 4. lay down the SSC data tree --------------------------------------------
+# The ADSP sensor PD needs: the sensor config JSONs, the registry,
+# sns_reg.conf/sns_reg_version, socinfo, the RFSA dsp libs, and the secure-DB
+# seed. The config/registry/socinfo are SHIPPED in this repo (ssc-data/ — the
+# generic 8380 reference set); the dsp firmware blobs and the secure DB are NOT
+# (proprietary / HW-bound) and are extracted at install. Sources, in order:
+#   (a) ssc-data/ in this repo, or a fuller capture (scripts/capture-ssc-data.sh)
+#   (b) the Windows persist tree (SSC_PERSIST_SRC or under WINDOWS_MOUNT)
 laid=0
 if [ -d "$SSC_DATA_SRC" ] && [ -n "$(ls -A "$SSC_DATA_SRC" 2>/dev/null)" ]; then
 	log "laying down SSC data from $SSC_DATA_SRC"
 	install -d "$DJ_ROOT"
 	cp -a "$SSC_DATA_SRC"/. "$DJ_ROOT"/
-	laid=1; ok "SSC tree installed (config + registry + sns_reg.* + socinfo + dsp + seed)"
+	laid=1; ok "SSC config + registry + socinfo installed from $SSC_DATA_SRC"
+	# The committed ssc-data ships no dsp/ firmware — pull it via droid-juicer.
+	if [ ! -d "$DJ_ROOT/dsp" ] || [ -z "$(ls -A "$DJ_ROOT/dsp" 2>/dev/null)" ]; then
+		if command -v droid-juicer >/dev/null; then log "extracting RFSA dsp libs via droid-juicer"; droid-juicer 2>/dev/null || warn "droid-juicer did not populate $DJ_ROOT/dsp — reboot to run its initramfs hook"; fi
+		[ -d "$DJ_ROOT/dsp" ] && [ -n "$(ls -A "$DJ_ROOT/dsp" 2>/dev/null)" ] || warn "no $DJ_ROOT/dsp (RFSA firmware) — the SSC sensor PD needs it; extract it from your DSP firmware"
+	fi
 else
 	# Windows persist fallback: .../DriverData/Qualcomm/fastRPC/persist/sensors
 	persist="${SSC_PERSIST_SRC:-}"

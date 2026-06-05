@@ -44,29 +44,33 @@ The 5 systemd drop-ins (`config/hexagonrpcd/dropins/`):
 | `auto-secure.conf` | exec the daemon against `…-adsp-secure` (fallback `…-adsp`) |
 | `safety.conf` | `StartLimitBurst=2` / `Restart=no` so a crash can't loop and wedge the ADSP |
 
-## What's device data (and where it comes from)
+## What's device data (and what's shipped)
 
-The whole `/var/lib/droid-juicer/sensors/` tree is Qualcomm/Microsoft-derived and
-is **never committed** here (it's `.gitignore`d):
+The `/var/lib/droid-juicer/sensors/` tree splits three ways:
 
-| piece | what | origin |
+| piece | what | shipped in `ssc-data/`? |
 |---|---|---|
-| `sensors/config/*.json` | source sensor definitions | Windows persist |
-| `sensors/registry/*` | generated registry keys | regenerated from config (Windows seed) |
-| `sensors/sns_reg.conf`, `sns_reg_version` | SNS registry metadata | Windows persist |
-| `socinfo/*` | SoC identity (soc_id, hw_platform…) | the SoC |
-| `dsp/*.so.1`, `dsp/adsp/*` | RFSA algorithm libs served to the ADSP | DSP firmware / `droid-juicer` |
-| `sns-secure-db-seed.bin` | the foreign Windows secure DB | `…\DriverData\Qualcomm\fastRPC\persist\sensors\registry\registry\sns_secure_database.bin` |
+| `sensors/config/*.json` | sensor definitions (generic 8380 reference set) | ✅ committed |
+| `sensors/registry/*` (minus the DB) | registry keys | ✅ committed |
+| `sensors/sns_reg.conf`, `sns_reg_version` | SNS registry metadata | ✅ committed |
+| `socinfo/*` | SoC identity (soc_id, hw_platform…) | ✅ committed |
+| `dsp/*.so.1`, `dsp/adsp/*` | RFSA algorithm libs (Qualcomm DSP6 firmware) | ❌ **gitignored** — extract at install |
+| `sns_secure_database.bin` / `sns-secure-db-seed.bin` | the Microsoft-derived, HW-bound secure DB | ❌ **gitignored** — extract from Windows |
 
-`droid-juicer` is an **Android** firmware extractor — it does **not** produce this
-on the A14, so the data is sourced from your own device:
+The config/registry is the same generic Qualcomm 8380 reference set on every
+x1p42100 box and isn't HW-bound, so it's committed — `droid-juicer` (an Android
+extractor) can't regenerate it on the A14, and shipping it is what makes stage 05
+work without a Windows round-trip. The two things that stay out:
 
-- **Best:** capture it from a working A14 —
-  `sudo ./scripts/capture-ssc-data.sh` writes `ssc-data/` (16 MB, gitignored),
-  which stage 05 lays down verbatim.
-- **From Windows:** set `SSC_PERSIST_SRC` to your Windows
-  `…\DriverData\Qualcomm\fastRPC\persist\sensors` (or just `SSC_SECDB_SEED` for
-  the seed alone) and let `droid-juicer` supply the `dsp/` libs.
+- **`dsp/` RFSA firmware** — Qualcomm DSP6 ELF blobs. `droid-juicer` (installed by
+  stage 05) extracts them; or pull them from your DSP firmware.
+- **the secure-DB seed** — extracted from your Windows
+  `…\DriverData\Qualcomm\fastRPC\persist\sensors\registry\registry\sns_secure_database.bin`
+  (set `SSC_SECDB_SEED`, or auto-found under `WINDOWS_MOUNT`).
+
+To re-snapshot the full tree from a working A14 (e.g. to refresh the committed
+config), `sudo ./scripts/capture-ssc-data.sh` writes everything to `ssc-data/`;
+the `dsp/` libs and `*.bin` DBs land there too but stay gitignored.
 
 ## iio-sensor-proxy & the A14 (stage 06)
 

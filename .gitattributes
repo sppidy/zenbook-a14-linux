@@ -1,0 +1,2 @@
+# SSC sensor data is byte-exact device data — never convert line endings.
+ssc-data/** -text

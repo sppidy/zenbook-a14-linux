@@ -58,7 +58,7 @@ That runs, in order:
 
 You can run each step on its own; they're idempotent. Edit `config/install.env` first (root UUID, Windows mount, kernel branch, etc.).
 
-> **SSC data:** stage 05 needs the sensor registry/config + a Windows secure-DB seed (Qualcomm/Microsoft data, not redistributable). On a working A14 run `sudo ./scripts/capture-ssc-data.sh` once to snapshot it into `ssc-data/` (gitignored); otherwise point `SSC_PERSIST_SRC` at your Windows persist dir. See [docs/ssc-sensors.md](docs/ssc-sensors.md).
+> **SSC data:** the sensor registry/config (generic 8380 reference set) is shipped in `ssc-data/`, so stage 05 works out of the box. Only the proprietary bits are extracted at install: the `dsp/` RFSA firmware (via `droid-juicer`) and the Microsoft-derived secure-DB seed (from your Windows). See [docs/ssc-sensors.md](docs/ssc-sensors.md).
 
 ## Firmware & licensing — read this
 

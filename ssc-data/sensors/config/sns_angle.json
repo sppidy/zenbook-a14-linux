@@ -1,0 +1,15 @@
+{
+  "config": {
+    "hw_platform": [ "CRD"],
+    "soc_id": ["555","635", "615", "616"]
+  },
+  "sns_angle": {
+    "owner": "sns_angle",
+    "gpio_low_angle": {"ver": "0","type": "flt","data": "30.0"
+    },
+    "gpio_high_angle": {"ver": "0","type": "flt","data": "150.0"
+    },
+    "gpio_pin": {"ver": "0","type": "int","data": "174"
+    }
+  }
+}

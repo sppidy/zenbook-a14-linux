@@ -9,9 +9,11 @@ config/.build.env
 tcblaunch.exe
 firmware/**/*.bin
 
-# SSC sensor data — Qualcomm registry/config/RFSA fw + the Microsoft-derived
-# secure-DB seed. Device/vendor data: captured locally, NEVER committed.
-ssc-data/
+# SSC sensor data. The sensor registry + config + socinfo ARE committed (the
+# generic 8380 reference set; lets the installer work without per-device
+# re-extraction). But NEVER commit the DSP firmware ELF blobs (dsp/) or the
+# Microsoft-derived, HW-bound secure DB (*.bin) — those are extracted at install.
+ssc-data/dsp/
 sns-secure-db-seed.bin
 sns_secure_database.bin
 

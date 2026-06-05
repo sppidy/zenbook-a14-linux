@@ -3,9 +3,10 @@
 # into ssc-data/ so the installer (scripts/05) can reproduce the exact sensor
 # bring-up on a reinstall or another A14.
 #
-# This is DEVICE/VENDOR data — the Qualcomm sensor registry/config/firmware and
-# the Microsoft-derived secure-DB seed. It is .gitignored and must NOT be
-# committed or redistributed. Run it once on a working machine:
+# The config/registry/socinfo it captures is committed in this repo (the generic
+# 8380 reference set); the dsp/ firmware blobs and the *.bin secure DBs are
+# .gitignored and must NOT be committed. Run it on a working machine to refresh
+# the shipped config (and to keep the dsp/ + seed locally):
 #
 #   sudo ./scripts/capture-ssc-data.sh            # -> ./ssc-data
 #   sudo ./scripts/capture-ssc-data.sh /some/dir  # -> /some/dir
