@@ -1,0 +1,633 @@
+diff --git a/hexagonrpcd/apps_std.c b/hexagonrpcd/apps_std.c
+index ff4d5a7..338a4fc 100644
+--- a/hexagonrpcd/apps_std.c
++++ b/hexagonrpcd/apps_std.c
+@@ -20,12 +20,17 @@
+  */
+ 
+ #include <errno.h>
++#include <fcntl.h>
+ #include <stdio.h>
+ #include <stdint.h>
+ #include <string.h>
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
++#define WRITE_FD_BASE HEXAGONFS_MAX_FD
++#define WRITE_FD_SLOTS 64
++#define IS_WRITE_FD(fd) ((fd) >= WRITE_FD_BASE && (fd) < WRITE_FD_BASE + WRITE_FD_SLOTS)
++
+ #include "aee_error.h"
+ #include "interfaces/apps_std.def"
+ #include "hexagonfs.h"
+@@ -36,6 +41,7 @@ struct apps_std_ctx {
+ 	int rootfd;
+ 	int adsp_avs_cfg_dirfd;
+ 	int adsp_library_dirfd;
++	int write_fds[WRITE_FD_SLOTS];
+ 	struct hexagonfs_fd *fds[HEXAGONFS_MAX_FD];
+ };
+ 
+@@ -73,6 +79,15 @@ static uint32_t apps_std_fclose(void *data,
+ 	const uint32_t *first_in = inbufs[0].p;
+ 	int ret;
+ 
++	if (IS_WRITE_FD(*first_in)) {
++		int slot = *first_in - WRITE_FD_BASE;
++		if (ctx->write_fds[slot] >= 0) {
++			close(ctx->write_fds[slot]);
++			ctx->write_fds[slot] = -1;
++		}
++		return 0;
++	}
++
+ 	ret = hexagonfs_close(ctx->fds, *first_in);
+ 	if (ret) {
+ 		fprintf(stderr, "Could not close: %s\n", strerror(-ret));
+@@ -157,7 +172,12 @@ static uint32_t apps_std_fopen_with_env(void *data,
+ 	struct apps_std_ctx *ctx = data;
+ 	uint32_t *out = outbufs[0].p;
+ 	char rw_mode;
+-	int dirfd, fd;
++	/*
++	 * Default to the root fd so the write branch (which uses dirfd before
++	 * the env-var lookup below assigns it) resolves sanely; the read branch
++	 * always reassigns dirfd before use. Absolute paths ignore it anyway.
++	 */
++	int dirfd = ctx->rootfd, fd;
+ 
+ 	// The name and environment variable must also be NULL-terminated
+ 	if (((const char *) inbufs[1].p)[inbufs[1].s - 1] != 0
+@@ -167,9 +187,72 @@ static uint32_t apps_std_fopen_with_env(void *data,
+ 
+ 	rw_mode = ((const char *) inbufs[4].p)[0];
+ 	if (rw_mode == 'w' || rw_mode == 'a') {
+-		fprintf(stderr, "Tried to open %s for writing\n",
+-				(const char *) inbufs[3].p);
+-		return AEE_EUNSUPPORTED;
++		char proc_path[64], host_path[4096];
++		ssize_t plen;
++		int rfd, hfd, wfd, slot;
++
++		rfd = hexagonfs_openat(ctx->fds, ctx->rootfd, dirfd, inbufs[3].p);
++		if (rfd >= 0) {
++			hfd = hexagonfs_mapped_host_fd(ctx->fds[rfd]);
++			if (hfd < 0) {
++				hexagonfs_close(ctx->fds, rfd);
++				return AEE_EFAILED;
++			}
++			snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", hfd);
++			plen = readlink(proc_path, host_path, sizeof(host_path) - 1);
++			hexagonfs_close(ctx->fds, rfd);
++			if (plen <= 0)
++				return AEE_EFAILED;
++			host_path[plen] = '\0';
++		} else {
++			const char *vpath = inbufs[3].p;
++			const char *last_slash = strrchr(vpath, '/');
++			if (!last_slash)
++				return AEE_EFAILED;
++			char parent[4096];
++			size_t pdir_len = last_slash - vpath;
++			if (pdir_len == 0)
++				pdir_len = 1;
++			memcpy(parent, vpath, pdir_len);
++			parent[pdir_len] = '/';
++			parent[pdir_len + 1] = '\0';
++			rfd = hexagonfs_openat(ctx->fds, ctx->rootfd, dirfd, parent);
++			if (rfd < 0)
++				return AEE_EFAILED;
++			hfd = hexagonfs_mapped_host_fd(ctx->fds[rfd]);
++			if (hfd < 0) {
++				hexagonfs_close(ctx->fds, rfd);
++				return AEE_EFAILED;
++			}
++			snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", hfd);
++			plen = readlink(proc_path, host_path, sizeof(host_path) - 1);
++			hexagonfs_close(ctx->fds, rfd);
++			if (plen <= 0)
++				return AEE_EFAILED;
++			host_path[plen] = '\0';
++			snprintf(host_path + plen, sizeof(host_path) - plen,
++				 "/%s", last_slash + 1);
++		}
++
++		wfd = open(host_path,
++			   (rw_mode == 'w' ? O_WRONLY | O_CREAT | O_TRUNC
++					   : O_WRONLY | O_CREAT | O_APPEND),
++			   0644);
++		if (wfd < 0) {
++			fprintf(stderr, "Write open failed: %s: %s\n",
++				host_path, strerror(errno));
++			return AEE_EFAILED;
++		}
++
++		for (slot = 0; slot < WRITE_FD_SLOTS; slot++) {
++			if (ctx->write_fds[slot] < 0) {
++				ctx->write_fds[slot] = wfd;
++				*out = WRITE_FD_BASE + slot;
++				return 0;
++			}
++		}
++		close(wfd);
++		return AEE_ENOMEMORY;
+ 	}
+ 
+ 	if (!strcmp(inbufs[1].p, "ADSP_LIBRARY_PATH")) {
+@@ -366,6 +449,7 @@ struct fastrpc_interface *fastrpc_apps_std_init(struct hexagonfs_dirent *root)
+ 
+ 	memcpy(iface, &apps_std_interface, sizeof(struct fastrpc_interface));
+ 
++	memset(ctx->write_fds, -1, sizeof(ctx->write_fds));
+ 	ctx->rootfd = hexagonfs_open_root(ctx->fds, root);
+ 	if (ctx->rootfd < 0)
+ 		goto err_free_ctx;
+@@ -405,6 +489,98 @@ void fastrpc_apps_std_deinit(struct fastrpc_interface *iface)
+ 	free(iface);
+ }
+ 
++static uint32_t apps_std_fwrite(void *data,
++				const struct fastrpc_io_buffer *inbufs,
++				struct fastrpc_io_buffer *outbufs)
++{
++	struct apps_std_ctx *ctx = data;
++	const struct {
++		uint32_t fd;
++	} *first_in = inbufs[0].p;
++	struct {
++		uint32_t written;
++		uint32_t is_eof;
++	} *first_out = outbufs[0].p;
++
++	if (IS_WRITE_FD(first_in->fd)) {
++		int slot = first_in->fd - WRITE_FD_BASE;
++		ssize_t n = write(ctx->write_fds[slot], inbufs[1].p, inbufs[1].s);
++		first_out->written = n > 0 ? n : 0;
++	} else {
++		first_out->written = inbufs[1].s;
++	}
++	first_out->is_eof = 0;
++	return 0;
++}
++
++static uint32_t apps_std_fremove(void *data,
++				 const struct fastrpc_io_buffer *inbufs,
++				 struct fastrpc_io_buffer *outbufs)
++{
++	(void)data;
++	(void)outbufs;
++	return 0;
++}
++
++/*
++ * close_fd (msg_id 35): like fclose, but the fd arrives as the second in-num,
++ * after the mid (inbufs[0] == { mid, fd }). Honours both the real-write fd
++ * space and ordinary hexagonfs fds.
++ */
++static uint32_t apps_std_fclose_fd(void *data,
++				   const struct fastrpc_io_buffer *inbufs,
++				   struct fastrpc_io_buffer *outbufs)
++{
++	struct apps_std_ctx *ctx = data;
++	const struct {
++		uint32_t mid;
++		uint32_t fd;
++	} *first_in = inbufs[0].p;
++	uint32_t fd = first_in->fd;
++	int ret;
++
++	if (IS_WRITE_FD(fd)) {
++		int slot = fd - WRITE_FD_BASE;
++		if (ctx->write_fds[slot] >= 0) {
++			close(ctx->write_fds[slot]);
++			ctx->write_fds[slot] = -1;
++		}
++		return 0;
++	}
++
++	ret = hexagonfs_close(ctx->fds, fd);
++	if (ret) {
++		fprintf(stderr, "Could not close (fd): %s\n", strerror(-ret));
++		return AEE_EFAILED;
++	}
++
++#ifdef HEXAGONRPC_VERBOSE
++	printf("close_fd(%u)\n", fd);
++#endif
++
++	return 0;
++}
++
++/*
++ * fopen_with_env_fd (msg_id 36): identical inbuf layout to fopen_with_env
++ * (envvar at [1], name at [3], mode at [4]); inbufs[0] is the mid rather than
++ * an empty primitives buffer, and there is one extra output ("len") whose
++ * purpose is unknown -- the ADSP accepts any value. Zero it and reuse the real
++ * open path, which writes the fd into outbufs[0].
++ */
++static uint32_t apps_std_fopen_with_env_fd(void *data,
++					   const struct fastrpc_io_buffer *inbufs,
++					   struct fastrpc_io_buffer *outbufs)
++{
++	struct {
++		uint32_t fd;
++		uint32_t len;
++	} *first_out = outbufs[0].p;
++
++	first_out->len = 0;
++	return apps_std_fopen_with_env(data, inbufs, outbufs);
++}
++
+ static const struct fastrpc_function_impl apps_std_procs[] = {
+ 	{ .def = NULL, .impl = NULL, },
+ 	{ .def = NULL, .impl = NULL, },
+@@ -420,7 +596,10 @@ static const struct fastrpc_function_impl apps_std_procs[] = {
+ 		.def = &apps_std_fread_def,
+ 		.impl = apps_std_fread,
+ 	},
+-	{ .def = NULL, .impl = NULL, },
++	{
++		.def = &apps_std_fwrite_def,
++		.impl = apps_std_fwrite,
++	},
+ 	{ .def = NULL, .impl = NULL, },
+ 	{ .def = NULL, .impl = NULL, },
+ 	{ .def = NULL, .impl = NULL, },
+@@ -445,7 +624,10 @@ static const struct fastrpc_function_impl apps_std_procs[] = {
+ 	{ .def = NULL, .impl = NULL, },
+ 	{ .def = NULL, .impl = NULL, },
+ 	{ .def = NULL, .impl = NULL, },
+-	{ .def = NULL, .impl = NULL, },
++	{
++		.def = &apps_std_fremove_def,
++		.impl = apps_std_fremove,
++	},
+ 	{ .def = NULL, .impl = NULL, },
+ 	{
+ 		.def = &apps_std_opendir_def,
+@@ -465,10 +647,21 @@ static const struct fastrpc_function_impl apps_std_procs[] = {
+ 		.def = &apps_std_stat_def,
+ 		.impl = apps_std_stat,
+ 	},
++	{ .def = NULL, .impl = NULL, },		/* 32 */
++	{ .def = NULL, .impl = NULL, },		/* 33 */
++	{ .def = NULL, .impl = NULL, },		/* 34 */
++	{
++		.def = &apps_std_fclose_fd_def,
++		.impl = apps_std_fclose_fd,
++	},					/* 35 */
++	{
++		.def = &apps_std_fopen_with_env_fd_def,
++		.impl = apps_std_fopen_with_env_fd,
++	},					/* 36 */
+ };
+ 
+ const struct fastrpc_interface apps_std_interface = {
+ 	.name = "apps_std",
+-	.n_procs = 32,
++	.n_procs = 37,
+ 	.procs = apps_std_procs,
+ };
+diff --git a/hexagonrpcd/hexagonfs.h b/hexagonrpcd/hexagonfs.h
+index 7682604..78feedf 100644
+--- a/hexagonrpcd/hexagonfs.h
++++ b/hexagonrpcd/hexagonfs.h
+@@ -73,6 +73,8 @@ int hexagonfs_open_root(struct hexagonfs_fd **fds, struct hexagonfs_dirent *root
+ int hexagonfs_openat(struct hexagonfs_fd **fds, int rootfd, int dirfd, const char *name);
+ int hexagonfs_close(struct hexagonfs_fd **fds, int fileno);
+ 
++int hexagonfs_mapped_host_fd(struct hexagonfs_fd *fd);
++
+ int hexagonfs_fstat(struct hexagonfs_fd **fds, int fileno, struct stat *stats);
+ int hexagonfs_lseek(struct hexagonfs_fd **fds, int fileno, off_t pos, int whence);
+ int hexagonfs_readdir(struct hexagonfs_fd **fds, int fileno, size_t size, char *name);
+diff --git a/hexagonrpcd/hexagonfs_mapped.c b/hexagonrpcd/hexagonfs_mapped.c
+index fd28c8c..b68ae0d 100644
+--- a/hexagonrpcd/hexagonfs_mapped.c
++++ b/hexagonrpcd/hexagonfs_mapped.c
+@@ -351,3 +351,27 @@ struct hexagonfs_file_ops hexagonfs_mapped_sysfs_ops = {
+ 	.seek = mapped_seek,
+ 	.stat = mapped_sysfs_stat,
+ };
++
++/*
++ * Return the underlying host file descriptor backing a mapped fd, or -1 if the
++ * fd is not host-backed (a virtual node, or an "empty" mapped_or_empty
++ * placeholder with no host file). The write path needs this to resolve the host
++ * path via /proc/self/fd/<host fd>; casting fd->data (a struct mapped_ctx *)
++ * straight to an int yields the truncated pointer, not a descriptor.
++ */
++int hexagonfs_mapped_host_fd(struct hexagonfs_fd *fd)
++{
++	struct mapped_ctx *ctx;
++
++	if (fd == NULL
++	 || (fd->ops != &hexagonfs_mapped_ops
++	  && fd->ops != &hexagonfs_mapped_or_empty_ops
++	  && fd->ops != &hexagonfs_mapped_sysfs_ops))
++		return -1;
++
++	ctx = fd->data;
++	if (ctx == NULL)
++		return -1;
++
++	return ctx->fd;
++}
+diff --git a/hexagonrpcd/interfaces/apps_std.def b/hexagonrpcd/interfaces/apps_std.def
+index 2fbbdb1..4fe8851 100644
+--- a/hexagonrpcd/interfaces/apps_std.def
++++ b/hexagonrpcd/interfaces/apps_std.def
+@@ -35,4 +35,16 @@ HEXAGONRPC_DEFINE_REMOTE_METHOD(27, apps_std_closedir, 2, 0, 0, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(28, apps_std_readdir, 2, 0, 66, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(31, apps_std_stat, 1, 1, 24, 0)
+ 
++HEXAGONRPC_DEFINE_REMOTE_METHOD(5, apps_std_fwrite, 1, 1, 2, 0)
++HEXAGONRPC_DEFINE_REMOTE_METHOD(24, apps_std_fremove, 0, 1, 0, 0)
++
++/*
++ * Methods with a msg_id >= 31 are sent over the wire as scalar method 31 with
++ * the real msg_id prepended as the first in-num (see listener.c). That extra
++ * leading uint32 is why these defs carry one more in-num than their non-_fd
++ * counterparts.
++ */
++HEXAGONRPC_DEFINE_REMOTE_METHOD(35, apps_std_fclose_fd, 2, 0, 0, 0)
++HEXAGONRPC_DEFINE_REMOTE_METHOD(36, apps_std_fopen_with_env_fd, 1, 4, 2, 0)
++
+ #endif /* INTERFACE_APPS_STD_DEF */
+diff --git a/hexagonrpcd/listener.c b/hexagonrpcd/listener.c
+index e298688..89bef59 100644
+--- a/hexagonrpcd/listener.c
++++ b/hexagonrpcd/listener.c
+@@ -142,9 +142,10 @@ static int return_for_next_invoke(int fd,
+ 				  struct fastrpc_io_buffer **decoded)
+ {
+ 	struct fastrpc_decoder_context *ctx;
+-	char inbufs[256];
++	char *inbufs = NULL;
+ 	char *outbufs = NULL;
+ 	uint32_t inbufs_len;
++	uint32_t inbufs_size = 256;
+ 	uint32_t outbufs_len;
+ 	int ret;
+ 
+@@ -160,47 +161,78 @@ static int return_for_next_invoke(int fd,
+ 		outbufs_encode(REMOTE_SCALARS_OUTBUFS(*sc), returned, outbufs);
+ 	}
+ 
+-	ret = adsp_listener_next2(fd,
+-				  *rctx, result,
+-				  outbufs_len, outbufs,
+-				  rctx, handle, sc,
+-				  &inbufs_len, 256, inbufs);
+-	if (ret) {
++	/*
++	 * The sensor registry init sends FastRPC messages larger than the old
++	 * fixed 256B input buffer (which used to be a hard "not implemented"
++	 * bail). Grow the buffer to whatever adsp_listener_next2 asks for via
++	 * inbufs_len / AEE_EBUFFERTOOSMALL and retry. (ported from
++	 * harrisonvanderbyl/hexagonrpc "fix big stuff")
++	 */
++	inbufs = malloc(inbufs_size);
++	if (inbufs == NULL) {
++		perror("Could not allocate input buffer");
++		ret = -1;
++		goto err_free_outbufs;
++	}
++
++	while (1) {
++		char *new_inbufs;
++
++		ret = adsp_listener_next2(fd,
++					  *rctx, result,
++					  outbufs_len, outbufs,
++					  rctx, handle, sc,
++					  &inbufs_len, inbufs_size, inbufs);
++		if (!ret && inbufs_len <= inbufs_size)
++			break;
++
++		if (inbufs_len > inbufs_size
++		 && (ret == 0 || ret == AEE_EBUFFERTOOSMALL)) {
++			inbufs_size = inbufs_len;
++			new_inbufs = realloc(inbufs, inbufs_size);
++			if (new_inbufs == NULL) {
++				perror("Could not grow input buffer");
++				ret = -1;
++				goto err_free_inbufs;
++			}
++
++			inbufs = new_inbufs;
++			continue;
++		}
++
++		if (ret == 0)
++			ret = -1;
++
+ 		if (ret == -1)
+ 			perror("Could not fetch next FastRPC message");
+ 		else
+ 			fprintf(stderr, "Could not fetch next FastRPC message: %d\n", ret);
+-
+-		goto err_free_outbufs;
+-	}
+-
+-	if (inbufs_len > 256) {
+-		fprintf(stderr, "Large (>256B) input buffers aren't implemented\n");
+-		ret = -1;
+-		goto err_free_outbufs;
++		goto err_free_inbufs;
+ 	}
+ 
+ 	ctx = inbuf_decode_start(*sc);
+ 	if (!ctx) {
+ 		perror("Could not start decoding");
+ 		ret = -1;
+-		goto err_free_outbufs;
++		goto err_free_inbufs;
+ 	}
+ 
+ 	ret = inbuf_decode(ctx, inbufs_len, inbufs);
+ 	if (ret) {
+ 		perror("Could not decode");
+-		goto err_free_outbufs;
++		goto err_free_inbufs;
+ 	}
+ 
+ 	if (!inbuf_decode_is_complete(ctx)) {
+ 		fprintf(stderr, "Expected more input buffers\n");
+ 		ret = -1;
+-		goto err_free_outbufs;
++		goto err_free_inbufs;
+ 	}
+ 
+ 	*decoded = inbuf_decode_finish(ctx);
+ 
++err_free_inbufs:
++	free(inbufs);
+ err_free_outbufs:
+ 	free(outbufs);
+ 	return ret;
+@@ -224,19 +256,42 @@ static int invoke_requested_procedure(size_t n_ifaces,
+ 		fprintf(stderr, "Handles are not supported, but got %u in, %u out\n",
+ 				(sc & 0xf0) >> 4, sc & 0xf);
+ 		*result = AEE_EBADPARM;
+-		return 1;
++		*returned = NULL;
++		return 0;
+ 	}
+ 
+ 	if (handle >= n_ifaces) {
+ 		fprintf(stderr, "Unsupported handle: %u\n", handle);
+ 		*result = AEE_EUNSUPPORTED;
+-		return 1;
++		*returned = NULL;
++		return 0;
++	}
++
++	/*
++	 * The scalar method field is only 5 bits (REMOTE_SCALARS_METHOD masks
++	 * 0x1f), so any method with a msg_id >= 31 is sent as method 31 with the
++	 * real msg_id prepended as the first uint32 of the primitives buffer
++	 * (decoded[0]). apps_std_stat (msg_id 31) is handled transparently: its
++	 * mid is 31, which routes straight back to procs[31].
++	 */
++	if (method == 31) {
++		if (REMOTE_SCALARS_INBUFS(sc) < 1 || decoded[0].s < 4) {
++			fprintf(stderr, "Invalid inbufs in mid (method 31) handling\n");
++			*result = AEE_EBADPARM;
++			*returned = NULL;
++			return 0;
++		}
++		method = *(const uint32_t *) decoded[0].p;
++#ifdef HEXAGONRPC_VERBOSE
++		printf("mid=%u\n", method);
++#endif
+ 	}
+ 
+ 	if (method >= ifaces[handle]->n_procs) {
+ 		fprintf(stderr, "Unsupported method: %u (%08x)\n", method, sc);
+ 		*result = AEE_EUNSUPPORTED;
+-		return 1;
++		*returned = NULL;
++		return 0;
+ 	}
+ 
+ 	impl = &ifaces[handle]->procs[method];
+@@ -244,7 +299,8 @@ static int invoke_requested_procedure(size_t n_ifaces,
+ 	if (impl->def == NULL || impl->impl == NULL) {
+ 		fprintf(stderr, "Unsupported method: %u (%08x)\n", method, sc);
+ 		*result = AEE_EUNSUPPORTED;
+-		return 1;
++		*returned = NULL;
++		return 0;
+ 	}
+ 
+ 	in_count = impl->def->in_bufs + ((impl->def->in_nums
+@@ -259,20 +315,22 @@ static int invoke_requested_procedure(size_t n_ifaces,
+ 			REMOTE_SCALARS_INBUFS(sc), in_count,
+ 			REMOTE_SCALARS_OUTBUFS(sc), out_count);
+ 		*result = AEE_EBADPARM;
+-		return 1;
++		*returned = NULL;
++		return 0;
+ 	}
+ 
+ 	ret = check_inbuf_sizes(impl->def, decoded);
+ 	if (ret) {
+ 		*result = AEE_EBADPARM;
+-		return 1;
++		*returned = NULL;
++		return 0;
+ 	}
+ 
+ 	*returned = allocate_outbufs(impl->def, decoded[0].p);
+ 	if (*returned == NULL && out_count > 0) {
+ 		perror("Could not allocate output buffers");
+ 		*result = AEE_ENOMEMORY;
+-		return 1;
++		return 0;
+ 	}
+ 
+ 	*result = impl->impl(ifaces[handle]->data, decoded, *returned);
+diff --git a/hexagonrpcd/rpcd.c b/hexagonrpcd/rpcd.c
+index cc1f5cf..f33ad1f 100644
+--- a/hexagonrpcd/rpcd.c
++++ b/hexagonrpcd/rpcd.c
+@@ -408,6 +408,8 @@ free_compatible:
+ 
+ int main(int argc, char* argv[])
+ {
++	setvbuf(stdout, NULL, _IOLBF, 0);
++
+ 	char *fastrpc_node = NULL;
+ 	const char *device_dir = "/usr/share/qcom/";
+ 	const char *dsp = "";
+diff --git a/hexagonrpcd/rpcd_builder.c b/hexagonrpcd/rpcd_builder.c
+index d374958..f3fc80d 100644
+--- a/hexagonrpcd/rpcd_builder.c
++++ b/hexagonrpcd/rpcd_builder.c
+@@ -30,6 +30,7 @@
+ #define DSP_LIBS		"/dsp/"
+ #define SENSORS_CONFIG		"/sensors/config/"
+ #define SENSORS_REGISTRY	"/sensors/registry/"
++#define SNS_REG_VERSION		"/sensors/sns_reg_version"
+ #define SNS_REG_CONFIG		"/sensors/sns_reg.conf"
+ #define SYSFS_SOCINFO		"/socinfo/"
+ 
+@@ -111,7 +112,8 @@ static struct hexagonfs_dirent *hfs_map_or_empty(const char *name, const char *p
+  */
+ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ {
+-	char *acdbdata, *dsp_libs, *sns_cfg, *sns_reg, *sns_reg_config, *socinfo;
++	char *acdbdata, *dsp_libs, *sns_cfg, *sns_reg, *sns_reg_version,
++	     *sns_reg_config, *socinfo;
+ 	size_t n_prefix;
+ 	struct hexagonfs_dirent *persist_dir, *vendor_dir;
+ 
+@@ -120,6 +122,7 @@ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ 	acdbdata = malloc(n_prefix + strlen(ACDBDATA) + 1);
+ 	sns_cfg = malloc(n_prefix + strlen(SENSORS_CONFIG) + 1);
+ 	sns_reg = malloc(n_prefix + strlen(SENSORS_REGISTRY) + 1);
++	sns_reg_version = malloc(n_prefix + strlen(SNS_REG_VERSION) + 1);
+ 	sns_reg_config = malloc(n_prefix + strlen(SNS_REG_CONFIG) + 1);
+ 	socinfo = malloc(n_prefix + strlen(SYSFS_SOCINFO) + 1);
+ 
+@@ -140,6 +143,11 @@ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ 		strcat(sns_reg, SENSORS_REGISTRY);
+ 	}
+ 
++	if (sns_reg_version != NULL) {
++		strcpy(sns_reg_version, prefix);
++		strcat(sns_reg_version, SNS_REG_VERSION);
++	}
++
+ 	if (sns_reg_config != NULL) {
+ 		strcpy(sns_reg_config, prefix);
+ 		strcat(sns_reg_config, SNS_REG_CONFIG);
+@@ -162,8 +170,9 @@ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ 	 */
+ 	persist_dir = hfs_mkdir("persist", 1,
+ 				hfs_mkdir("sensors", 1,
+-					hfs_mkdir("registry", 1,
+-						hfs_map("registry", sns_reg)
++					hfs_mkdir("registry", 2,
++						hfs_map("registry", sns_reg),
++						hfs_map_or_empty("sns_reg_version", sns_reg_version)
+ 					)
+ 				)
+ 		      );
+diff --git a/tools/sscregistrygen.c b/tools/sscregistrygen.c
+index 703a88c..387f965 100644
+--- a/tools/sscregistrygen.c
++++ b/tools/sscregistrygen.c
+@@ -221,6 +221,11 @@ void apply_sensor_configuration(struct config_filter *filter,
+ 
+ 	close(fd);
+ 
++	if (in == NULL) {
++		fprintf(stderr, "Skipping %s: invalid JSON\n", file);
++		return;
++	}
++
+ 	config = json_object_object_get(in, "config");
+ 	if (config != NULL) {
+ 		if (!check_config_filter(filter, config))

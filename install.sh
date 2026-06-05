@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # zenbook-a14-linux — top-level installer.
-# Runs the four stages in order. Each stage is also runnable on its own.
+# Runs the stages in order. Each stage is also runnable on its own.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/lib/common.sh"
@@ -26,6 +26,7 @@ read -rp "Proceed? [y/N] " a; [ "${a,,}" = y ] || die "aborted"
 "$HERE/scripts/02-install-kernel.sh"
 "$HERE/scripts/03-setup-el2-boot.sh"
 "$HERE/scripts/04-apply-config.sh"
+"$HERE/scripts/05-setup-ssc-sensors.sh"
 
 cat <<EOF
 
@@ -34,5 +35,7 @@ $(ok "Install complete.")
   After boot, verify:
     uname -r            # 7.1.0-rc6-a14-x1p-jg-el2+
     ls /dev/kvm         # EL2 live
-    cat /sys/class/hwmon/*/fan1_input   # EC fan
+    cat /sys/class/hwmon/*/fan1_input        # EC fan
+    systemctl is-active hexagonrpcd          # SSC up
+    journalctl --user -u autobright -f       # camera-ALS streaming (lux/cct)
 EOF

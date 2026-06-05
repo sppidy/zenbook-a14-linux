@@ -9,6 +9,12 @@ config/.build.env
 tcblaunch.exe
 firmware/**/*.bin
 
+# SSC sensor data — Qualcomm registry/config/RFSA fw + the Microsoft-derived
+# secure-DB seed. Device/vendor data: captured locally, NEVER committed.
+ssc-data/
+sns-secure-db-seed.bin
+sns_secure_database.bin
+
 # slbounce EFI drivers are built from the slbounce project, not committed
 config/slbounce/*.efi
 

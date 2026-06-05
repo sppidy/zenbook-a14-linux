@@ -27,7 +27,7 @@ This mirrors a **working** A14 and every stage was checked against that live mac
 | Keyboard / touchpad | ✅ | |
 | Embedded Controller (fan, profile, kbd backlight) | ✅ | `asus-zenbook-a14-ec` + `hid-asus-ec` |
 | Cameras (OV02C10 RGB + HM1092 IR) | ✅ | qcom camss (X1P42100 support) |
-| Ambient Light Sensor → auto-brightness | ✅ | ov02c10 camera "color" sensor read over SSC (QMI/QRTR) → `autobright` daemon drives `dp_aux_backlight` (lux + CCT) |
+| Ambient Light Sensor → auto-brightness | ✅ | ov02c10 camera "color" sensor over SSC (`hexagonrpcd`, stage 05) → `autobright` drives `dp_aux_backlight` (lux + CCT). See [docs/ssc-sensors.md](docs/ssc-sensors.md) |
 | Audio | ✅ | WCD9395 / lpass |
 | USB-C / DisplayPort-alt | ✅ | |
 | **iris HW video codec** | ❌ **blocked** | VPU is TME-locked to the secure/Windows owner; no PAS PD for Linux. **Do not enable** — it hard-resets the SoC. SW video decode is used. See [docs/iris-wall.md](docs/iris-wall.md). |
@@ -53,8 +53,11 @@ That runs, in order:
 2. **`scripts/02-install-kernel.sh`** — clones + builds the kernel branch with `config/kernel.config`, runs `modules_install`.
 3. **`scripts/03-setup-el2-boot.sh`** — installs the built drivers + `tcblaunch.exe`, the EL2 device tree, and the systemd-boot entry.
 4. **`scripts/04-apply-config.sh`** — iris blacklist, kernel cmdline, optional `autobright` ALS daemon.
+5. **`scripts/05-setup-ssc-sensors.sh`** — brings up the SSC camera-ALS: installs `hexagonrpcd` + the patched daemon + systemd drop-ins, and lays down the sensor data tree (registry/config/firmware + the secure-DB seed). See [docs/ssc-sensors.md](docs/ssc-sensors.md).
 
 You can run each step on its own; they're idempotent. Edit `config/install.env` first (root UUID, Windows mount, kernel branch, etc.).
+
+> **SSC data:** stage 05 needs the sensor registry/config + a Windows secure-DB seed (Qualcomm/Microsoft data, not redistributable). On a working A14 run `sudo ./scripts/capture-ssc-data.sh` once to snapshot it into `ssc-data/` (gitignored); otherwise point `SSC_PERSIST_SRC` at your Windows persist dir. See [docs/ssc-sensors.md](docs/ssc-sensors.md).
 
 ## Firmware & licensing — read this
 
