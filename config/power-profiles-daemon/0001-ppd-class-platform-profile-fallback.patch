@@ -1,0 +1,236 @@
+diff --git a/src/ppd-driver-platform-profile.c b/src/ppd-driver-platform-profile.c
+index 28fc335..752b7d4 100644
+--- a/src/ppd-driver-platform-profile.c
++++ b/src/ppd-driver-platform-profile.c
+@@ -18,6 +18,7 @@
+ #define LAPMODE_SYSFS_NAME "dytc_lapmode"
+ #define ACPI_PLATFORM_PROFILE_PATH "/sys/firmware/acpi/platform_profile"
+ #define ACPI_PLATFORM_PROFILE_CHOICES_PATH "/sys/firmware/acpi/platform_profile_choices"
++#define CLASS_PLATFORM_PROFILE_DIR "/sys/class/platform-profile"
+ 
+ struct _PpdDriverPlatformProfile
+ {
+@@ -32,6 +33,12 @@ struct _PpdDriverPlatformProfile
+   GFileMonitor *lapmode_mon;
+   GFileMonitor *acpi_platform_profile_mon;
+   gulong acpi_platform_profile_changed_id;
++
++  /* Resolved at probe time. Either points at the ACPI firmware paths, or
++   * at /sys/class/platform-profile/<dev>/{profile,choices} when the ACPI
++   * firmware path is absent (DT-only systems). */
++  char *profile_path;
++  char *choices_path;
+ };
+ 
+ G_DEFINE_TYPE (PpdDriverPlatformProfile, ppd_driver_platform_profile, PPD_TYPE_DRIVER_PLATFORM)
+@@ -48,7 +55,7 @@ ppd_driver_platform_profile_constructor (GType                  type,
+                                                                                    construct_params);
+   g_object_set (object,
+                 "driver-name", "platform_profile",
+-                "profiles", PPD_PROFILE_PERFORMANCE | PPD_PROFILE_BALANCED | PPD_PROFILE_POWER_SAVER,
++                "profiles", PPD_PROFILE_PERFORMANCE | PPD_PROFILE_BALANCED | PPD_PROFILE_POWER_SAVER | PPD_PROFILE_MAX_POWER,
+                 NULL);
+ 
+   return object;
+@@ -69,6 +76,10 @@ profile_to_acpi_platform_profile_value (PpdDriverPlatformProfile *self,
+     return "balanced";
+   case PPD_PROFILE_PERFORMANCE:
+     return "performance";
++  case PPD_PROFILE_MAX_POWER:
++    if (g_strv_contains ((const char * const*) self->profile_choices, "max-power"))
++      return "max-power";
++    return "performance";
+   }
+ 
+   g_debug ("Unhandled ACPI platform profile '%d'", profile);
+@@ -96,29 +107,65 @@ acpi_platform_profile_value_to_profile (const char *str)
+   if (g_str_equal (str, "performance"))
+     return PPD_PROFILE_PERFORMANCE;
+ 
++  if (g_str_equal (str, "max-power"))
++    return PPD_PROFILE_MAX_POWER;
++
+   g_debug ("Unhandled ACPI platform profile '%s'", str);
+   g_return_val_if_reached (PPD_PROFILE_UNSET);
+ }
+ 
++static gboolean
++resolve_platform_profile_paths (PpdDriverPlatformProfile *self)
++{
++  g_autofree char *acpi_path = NULL;
++  g_autofree char *class_dir = NULL;
++  GDir *dir;
++  const char *entry;
++
++  acpi_path = ppd_utils_get_sysfs_path (ACPI_PLATFORM_PROFILE_PATH);
++  if (g_file_test (acpi_path, G_FILE_TEST_EXISTS)) {
++    self->profile_path = g_steal_pointer (&acpi_path);
++    self->choices_path = ppd_utils_get_sysfs_path (ACPI_PLATFORM_PROFILE_CHOICES_PATH);
++    return TRUE;
++  }
++
++  /* Fallback: /sys/class/platform-profile/<name>/{profile,choices}.
++   * Pick the first device — multi-handler systems also expose
++   * /sys/firmware/acpi/platform_profile, so we only land here when
++   * exactly one driver has registered (DT-only path). */
++  class_dir = ppd_utils_get_sysfs_path (CLASS_PLATFORM_PROFILE_DIR);
++  dir = g_dir_open (class_dir, 0, NULL);
++  if (!dir)
++    return FALSE;
++
++  while ((entry = g_dir_read_name (dir)) != NULL) {
++    self->profile_path = g_build_filename (class_dir, entry, "profile", NULL);
++    self->choices_path = g_build_filename (class_dir, entry, "choices", NULL);
++    g_debug ("Using platform_profile class device at %s", self->profile_path);
++    break;
++  }
++  g_dir_close (dir);
++
++  return self->profile_path != NULL;
++}
++
+ static PpdProfile
+-read_platform_profile (void)
++read_platform_profile (PpdDriverPlatformProfile *self)
+ {
+-  g_autofree char *platform_profile_path = NULL;
+   g_autofree char *new_profile_str = NULL;
+   g_autoptr(GError) error = NULL;
+   PpdProfile new_profile;
+ 
+-  platform_profile_path = ppd_utils_get_sysfs_path (ACPI_PLATFORM_PROFILE_PATH);
+-  if (!g_file_get_contents (platform_profile_path,
++  if (!g_file_get_contents (self->profile_path,
+                             &new_profile_str, NULL, &error)) {
+     g_debug ("Failed to get contents for '%s': %s",
+-             platform_profile_path,
++             self->profile_path,
+              error->message);
+     return PPD_PROFILE_UNSET;
+   }
+ 
+   new_profile = acpi_platform_profile_value_to_profile (g_strchomp (new_profile_str));
+-  g_debug ("ACPI performance_profile is now '%s', so profile is detected as %s",
++  g_debug ("platform_profile is now '%s', so profile is detected as %s",
+            g_strchomp (new_profile_str),
+            ppd_profile_to_str (new_profile));
+   return new_profile;
+@@ -127,15 +174,13 @@ read_platform_profile (void)
+ static gboolean
+ save_platform_profile_choices (PpdDriverPlatformProfile *self)
+ {
+-  g_autofree char *platform_profile_choices_path = NULL;
+   g_autofree char *choices_str = NULL;
+   g_autoptr(GError) error = NULL;
+ 
+-  platform_profile_choices_path = ppd_utils_get_sysfs_path (ACPI_PLATFORM_PROFILE_CHOICES_PATH);
+-  if (!g_file_get_contents (platform_profile_choices_path,
++  if (!g_file_get_contents (self->choices_path,
+                             &choices_str, NULL, &error)) {
+     g_debug ("Failed to get contents for '%s': %s",
+-             platform_profile_choices_path,
++             self->choices_path,
+              error->message);
+     return FALSE;
+   }
+@@ -184,7 +229,7 @@ update_acpi_platform_profile_state (PpdDriverPlatformProfile *self)
+ {
+   PpdProfile new_profile;
+ 
+-  new_profile = read_platform_profile ();
++  new_profile = read_platform_profile (self);
+   if (new_profile == PPD_PROFILE_UNSET ||
+       new_profile == self->acpi_platform_profile)
+     return;
+@@ -218,7 +263,7 @@ acpi_platform_profile_changed (GFileMonitor      *monitor,
+ {
+   PpdDriverPlatformProfile *self = user_data;
+ 
+-  g_debug (ACPI_PLATFORM_PROFILE_PATH " changed (%d)", event_type);
++  g_debug ("platform_profile changed (%d)", event_type);
+   if (self->probe_result == PPD_PROBE_RESULT_DEFER) {
+     g_signal_emit_by_name (G_OBJECT (self), "probe-request", 0);
+     return;
+@@ -238,7 +283,6 @@ ppd_driver_platform_profile_activate_profile (PpdDriver                   *drive
+ {
+   PpdDriverPlatformProfile *self = PPD_DRIVER_PLATFORM_PROFILE (driver);
+   g_autoptr(GError) local_error = NULL;
+-  g_autofree char *platform_profile_path = NULL;
+   const char *platform_profile_value;
+ 
+   g_return_val_if_fail (self->acpi_platform_profile_mon, FALSE);
+@@ -258,8 +302,7 @@ ppd_driver_platform_profile_activate_profile (PpdDriver                   *drive
+   }
+ 
+   g_signal_handler_block (G_OBJECT (self->acpi_platform_profile_mon), self->acpi_platform_profile_changed_id);
+-  platform_profile_path = ppd_utils_get_sysfs_path (ACPI_PLATFORM_PROFILE_PATH);
+-  if (!ppd_utils_write (platform_profile_path,
++  if (!ppd_utils_write (self->profile_path,
+                         profile_to_acpi_platform_profile_value (self, profile), &local_error)) {
+     g_debug ("Failed to write to acpi_platform_profile: %s", local_error->message);
+     g_propagate_prefixed_error (error, g_steal_pointer (&local_error),
+@@ -292,14 +335,12 @@ ppd_driver_platform_profile_probe (PpdDriver  *driver)
+ {
+   PpdDriverPlatformProfile *self = PPD_DRIVER_PLATFORM_PROFILE (driver);
+   g_autoptr(GFile) acpi_platform_profile = NULL;
+-  g_autofree char *platform_profile_path = NULL;
+ 
+   g_return_val_if_fail (self->probe_result == PPD_PROBE_RESULT_UNSET, PPD_PROBE_RESULT_FAIL);
+ 
+   /* Profile interface */
+-  platform_profile_path = ppd_utils_get_sysfs_path (ACPI_PLATFORM_PROFILE_PATH);
+-  if (!g_file_test (platform_profile_path, G_FILE_TEST_EXISTS)) {
+-    g_debug ("No platform_profile sysfs file");
++  if (!resolve_platform_profile_paths (self)) {
++    g_debug ("No platform_profile sysfs file (firmware/acpi or class)");
+     return PPD_PROBE_RESULT_FAIL;
+   }
+   if (!save_platform_profile_choices (self))
+@@ -310,7 +351,7 @@ ppd_driver_platform_profile_probe (PpdDriver  *driver)
+     return self->probe_result;
+   }
+ 
+-  acpi_platform_profile = g_file_new_for_path (platform_profile_path);
++  acpi_platform_profile = g_file_new_for_path (self->profile_path);
+   self->acpi_platform_profile_mon = g_file_monitor (acpi_platform_profile,
+                                                     G_FILE_MONITOR_NONE,
+                                                     NULL,
+@@ -354,6 +395,8 @@ ppd_driver_platform_profile_finalize (GObject *object)
+   g_clear_signal_handler (&driver->acpi_platform_profile_changed_id,
+                           driver->acpi_platform_profile_mon);
+   g_clear_pointer (&driver->profile_choices, g_strfreev);
++  g_clear_pointer (&driver->profile_path, g_free);
++  g_clear_pointer (&driver->choices_path, g_free);
+   g_clear_object (&driver->device);
+   g_clear_object (&driver->lapmode_mon);
+   g_clear_object (&driver->acpi_platform_profile_mon);
+diff --git a/src/ppd-profile.h b/src/ppd-profile.h
+index 4232c34..0e1c104 100644
+--- a/src/ppd-profile.h
++++ b/src/ppd-profile.h
+@@ -36,13 +36,15 @@ typedef enum {
+  * @PPD_PROFILE_PERFORMANCE: as fast as possible, a profile that does
+  *   not care about noise or battery consumption, only available
+  *   on some systems.
++ * @PPD_PROFILE_MAX_POWER: maximum performance, higher than performance
+  *
+  * The different profiles available for users to select.
+  */
+ typedef enum {
+   PPD_PROFILE_POWER_SAVER  = 1 << 0,
+   PPD_PROFILE_BALANCED     = 1 << 1,
+-  PPD_PROFILE_PERFORMANCE  = 1 << 2
++  PPD_PROFILE_PERFORMANCE  = 1 << 2,
++  PPD_PROFILE_MAX_POWER    = 1 << 3
+ } PpdProfile;
+ 
+ /**
+@@ -61,7 +63,7 @@ typedef enum{
+   PPD_POWER_CHANGED_REASON_BATTERY,
+ } PpdPowerChangedReason;
+ 
+-#define PPD_PROFILE_ALL   (PPD_PROFILE_BALANCED | PPD_PROFILE_POWER_SAVER | PPD_PROFILE_PERFORMANCE)
++#define PPD_PROFILE_ALL   (PPD_PROFILE_BALANCED | PPD_PROFILE_POWER_SAVER | PPD_PROFILE_PERFORMANCE | PPD_PROFILE_MAX_POWER)
+ #define PPD_PROFILE_UNSET (0)
+ 
+ const char *ppd_profile_to_str (PpdProfile profile);

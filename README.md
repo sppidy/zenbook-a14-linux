@@ -55,6 +55,7 @@ That runs, in order:
 4. **`scripts/04-apply-config.sh`** — iris blacklist, kernel cmdline, optional `autobright` ALS daemon.
 5. **`scripts/05-setup-ssc-sensors.sh`** — brings up the SSC camera-ALS: installs `hexagonrpcd` + the patched daemon + systemd drop-ins, and lays down the sensor data tree (registry/config/firmware + the secure-DB seed). See [docs/ssc-sensors.md](docs/ssc-sensors.md).
 6. **`scripts/06-setup-iio-sensor-proxy.sh`** — builds libssc + an SSC-enabled `iio-sensor-proxy` and exposes the camera-ALS on the standard `net.hadess.SensorProxy` D-Bus interface (GNOME native auto-brightness, `monitor-sensor`). See [docs/ssc-sensors.md](docs/ssc-sensors.md).
+7. **`scripts/07-patch-power-profiles.sh`** — builds `power-profiles-daemon` with the A14 patch so it reads the EC's DT `/sys/class/platform-profile/` (+ the `max-power` profile); without it `powerprofilesctl`/GNOME see no profiles.
 
 You can run each step on its own; they're idempotent. Edit `config/install.env` first (root UUID, Windows mount, kernel branch, etc.).
 

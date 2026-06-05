@@ -28,6 +28,7 @@ read -rp "Proceed? [y/N] " a; [ "${a,,}" = y ] || die "aborted"
 "$HERE/scripts/04-apply-config.sh"
 "$HERE/scripts/05-setup-ssc-sensors.sh"
 "$HERE/scripts/06-setup-iio-sensor-proxy.sh"
+"$HERE/scripts/07-patch-power-profiles.sh"
 
 cat <<EOF
 
