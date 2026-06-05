@@ -1,0 +1,18 @@
+# runtime/build artifacts
+config/.build.env
+*.swp
+*~
+
+# NEVER commit proprietary firmware (extract from Windows at install time)
+*.mbn
+*.elf
+tcblaunch.exe
+firmware/**/*.bin
+
+# slbounce EFI drivers are built from the slbounce project, not committed
+config/slbounce/*.efi
+
+# kernel build output / cloned source
+*.dtb
+Image
+zenbook-a14-kernel/

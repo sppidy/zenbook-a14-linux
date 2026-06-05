@@ -1,0 +1,27 @@
+# Proprietary Qualcomm/ASUS firmware — extracted from the device's own Windows
+# (NOT redistributable, NOT in this repo). Each file is installed under
+#     /lib/firmware/updates/qcom/x1p42100/ASUSTeK/zenbook-a14/
+# (the 'updates' tree overrides linux-firmware and won't be clobbered by it).
+# Files flagged ESP=yes are ALSO copied to
+#     $ESP/firmware/qcom/x1p42100/ASUSTeK/zenbook-a14/
+# so the slbounce boot chain starts the DSPs before Linux (Linux then attaches).
+#
+#   filename            | also on ESP (boot chain)?
+#
+# --- DSP: Audio (ADSP) + Compute (CDSP) images and their device trees ---
+qcadsp8380.mbn          | yes
+adsp_dtbs.elf           | yes
+qccdsp8380.mbn          | yes
+cdsp_dtbs.elf           | yes
+# --- PD-mapper protection-domain config (kernel qcom_pd_mapper reads these;
+#     without them SSC/ALS/battmgr/audio PDs don't come up) ---
+adspr.jsn               | no
+adsps.jsn               | no
+adspua.jsn              | no
+cdspr.jsn               | no
+battmgr.jsn             | no
+# --- GPU zap shader (signed per-SoC content-protection shader) ---
+qcdxkmsucpurwa.mbn      | no
+# --- Video (iris) — kept for completeness; iris is blacklisted (docs/iris-wall.md) ---
+qcvss8380.mbn           | no
+qcvss8380_pa.mbn        | no

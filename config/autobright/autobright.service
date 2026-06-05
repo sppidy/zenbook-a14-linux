@@ -1,0 +1,13 @@
+[Unit]
+Description=A14 auto-brightness from the SSC camera ALS
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/python3 -u /home/spidy/a14-re/presence-re/autobright.py
+Restart=always
+RestartSec=5
+# Calibration (edit to taste; see autobright.py header):
+#Environment=AB_LUX_MIN=60 AB_LUX_MAX=2000 AB_BL_MIN_PCT=0.12
+
+[Install]
+WantedBy=default.target
