@@ -1,0 +1,30 @@
+diff --git a/src/libssc-sensor-light.c b/src/libssc-sensor-light.c
+index e0bd99a..e2be7e7 100644
+--- a/src/libssc-sensor-light.c
++++ b/src/libssc-sensor-light.c
+@@ -268,13 +268,24 @@ ssc_sensor_light_new_finish (GAsyncResult *result, GError **error)
+ void
+ ssc_sensor_light_new (GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data)
+ {
++	/*
++	 * Most devices expose a standard "ambient_light" SSC sensor. Some (e.g. the
++	 * ASUS Zenbook A14, whose only ALS is the camera-QSH sensor) instead expose
++	 * it under a different data type such as "color" (lux in intensity[0], CCT
++	 * in intensity[1] which we ignore). Allow an override via SSC_LIGHT_DATA_TYPE
++	 * so those devices work without a code change; default stays "ambient_light".
++	 */
++	const gchar *data_type = g_getenv ("SSC_LIGHT_DATA_TYPE");
++	if (data_type == NULL || *data_type == '\0')
++		data_type = "ambient_light";
++
+ 	g_async_initable_new_async (
+ 			SSC_TYPE_SENSOR_LIGHT,
+ 			G_PRIORITY_DEFAULT,
+ 			cancellable,
+ 			callback,
+ 			user_data,
+-			SSC_SENSOR_DATA_TYPE, "ambient_light",
++			SSC_SENSOR_DATA_TYPE, data_type,
+ 			NULL);
+ }
+ 

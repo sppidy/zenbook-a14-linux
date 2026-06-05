@@ -27,7 +27,7 @@ This mirrors a **working** A14 and every stage was checked against that live mac
 | Keyboard / touchpad | ✅ | |
 | Embedded Controller (fan, profile, kbd backlight) | ✅ | `asus-zenbook-a14-ec` + `hid-asus-ec` |
 | Cameras (OV02C10 RGB + HM1092 IR) | ✅ | qcom camss (X1P42100 support) |
-| Ambient Light Sensor → auto-brightness | ✅ | ov02c10 camera "color" sensor over SSC (`hexagonrpcd`, stage 05) → `autobright` drives `dp_aux_backlight` (lux + CCT). See [docs/ssc-sensors.md](docs/ssc-sensors.md) |
+| Ambient Light Sensor → auto-brightness | ✅ | ov02c10 camera "color" sensor over SSC (`hexagonrpcd`, stage 05). Exposed two ways: the `autobright` daemon, and `iio-sensor-proxy`+libssc (stage 06 → `monitor-sensor`, GNOME native auto-brightness). See [docs/ssc-sensors.md](docs/ssc-sensors.md) |
 | Audio | ✅ | WCD9395 / lpass |
 | USB-C / DisplayPort-alt | ✅ | |
 | **iris HW video codec** | ❌ **blocked** | VPU is TME-locked to the secure/Windows owner; no PAS PD for Linux. **Do not enable** — it hard-resets the SoC. SW video decode is used. See [docs/iris-wall.md](docs/iris-wall.md). |
@@ -54,6 +54,7 @@ That runs, in order:
 3. **`scripts/03-setup-el2-boot.sh`** — installs the built drivers + `tcblaunch.exe`, the EL2 device tree, and the systemd-boot entry.
 4. **`scripts/04-apply-config.sh`** — iris blacklist, kernel cmdline, optional `autobright` ALS daemon.
 5. **`scripts/05-setup-ssc-sensors.sh`** — brings up the SSC camera-ALS: installs `hexagonrpcd` + the patched daemon + systemd drop-ins, and lays down the sensor data tree (registry/config/firmware + the secure-DB seed). See [docs/ssc-sensors.md](docs/ssc-sensors.md).
+6. **`scripts/06-setup-iio-sensor-proxy.sh`** — builds libssc + an SSC-enabled `iio-sensor-proxy` and exposes the camera-ALS on the standard `net.hadess.SensorProxy` D-Bus interface (GNOME native auto-brightness, `monitor-sensor`). See [docs/ssc-sensors.md](docs/ssc-sensors.md).
 
 You can run each step on its own; they're idempotent. Edit `config/install.env` first (root UUID, Windows mount, kernel branch, etc.).
 

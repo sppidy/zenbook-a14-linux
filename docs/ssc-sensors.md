@@ -68,13 +68,50 @@ on the A14, so the data is sourced from your own device:
   `…\DriverData\Qualcomm\fastRPC\persist\sensors` (or just `SSC_SECDB_SEED` for
   the seed alone) and let `droid-juicer` supply the `dsp/` libs.
 
+## iio-sensor-proxy & the A14 (stage 06)
+
+Stage 06 replaces the distro `iio-sensor-proxy` with an upstream build compiled
+`-Dssc-support=enabled`, plus **libssc** (Qualcomm Sensor Core client lib), so
+the SSC sensors appear on the standard `net.hadess.SensorProxy` D-Bus interface
+— i.e. GNOME/KDE native auto-brightness and `monitor-sensor` work.
+
+The A14 twist: libssc's light driver looks up the standard **`ambient_light`**
+SSC sensor, but the A14 has none — its ALS is the camera-QSH **`color`** sensor
+(the same one `autobright` reads). The complete A14 SSC inventory is just:
+
+| data_type | sensor |
+|---|---|
+| `color` | camera-QSH ALS (lux + CCT) |
+| `camera_face_detect` | camera presence / face detect |
+| `camera_handshake` | camera handshake gesture |
+| `registry` | the SUID-lookup service |
+
+No `accel`/`gyro`/`mag`/`proximity`/`ambient_light` — the A14 has no IMU, and the
+accel/gyro JSONs in the registry are Qualcomm's generic 8380 reference superset
+(it configures four different IMU vendors; `sns_reg_config` `owner` is `"NA"` and
+the entries are `8380_crd_*`, i.e. Compute Reference Design — not the A14 BOM).
+A configured-but-absent chip never registers, which is why the SUID lookup is
+empty for them.
+
+So stage 06 ships a one-line **libssc patch** (`config/iio-sensor-proxy/0001-…patch`)
+making the light data type overridable via `SSC_LIGHT_DATA_TYPE`, and a systemd
+drop-in (`config/iio-sensor-proxy/dropins/10-a14-color-als.conf`) that sets
+`SSC_LIGHT_DATA_TYPE=color`. The `color` event carries `[lux, CCT]`; libssc takes
+`intensity[0]` (= lux), exactly like a standard ALS.
+
+After this, `monitor-sensor` reports real lux from the camera-ALS, and you can
+let GNOME drive brightness (Settings → Power → *Automatic Screen Brightness*) and
+disable the `autobright` daemon if you prefer.
+
 ## Verify
 
 ```bash
-systemctl status hexagonrpcd            # active (running)
-journalctl --user -u autobright -f      # lux=… cct=…K -> …/2047   (camera-ALS live)
+systemctl status hexagonrpcd            # active (running)  — SSC up
+journalctl --user -u autobright -f      # lux=… cct=…K -> …/2047   (camera-ALS via the daemon)
+monitor-sensor                          # 'Light changed: … (lux)' (camera-ALS via iio-sensor-proxy)
 ```
 
 If `hexagonrpcd` crash-loops at `:279`, your seed is missing or not the foreign
-Windows DB. If `autobright` shows no lux, the SSC didn't bring up the color
-sensor — check `journalctl -u hexagonrpcd -b`.
+Windows DB. If `monitor-sensor` shows *No ambient light sensor*, check that the
+drop-in set `SSC_LIGHT_DATA_TYPE=color` and that `/dev/fastrpc-adsp*` is tagged
+`ssc-light` (`udevadm info -q property -n /dev/fastrpc-adsp-secure`).
