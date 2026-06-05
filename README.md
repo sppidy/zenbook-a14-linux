@@ -43,10 +43,13 @@ This mirrors a **working** A14 and every stage was checked against that live mac
 ## Install (quick)
 
 ```bash
+./scripts/preflight.sh   # optional: sanity-check machine/env/config first (read-only)
 sudo ./install.sh
 ```
 
-That runs, in order:
+`install.sh` runs `scripts/preflight.sh` first and **aborts** if this isn't an A14
+(`x1p42100`), the ESP isn't mounted, or `ROOT_UUID` is wrong — set `A14_FORCE=1`
+to override the model check on a variant. It then runs, in order:
 
 0. **`scripts/00-build-slbounce.sh`** — pulls + builds the `slbounce` + `qebspil` EFI drivers into `config/slbounce/`. See [docs/el2-boot.md](docs/el2-boot.md).
 1. **`scripts/01-extract-firmware.sh`** — extracts the proprietary firmware from your Windows / official driver folder into `/lib/firmware/updates/…` (and the DSP blobs onto the ESP), and checks the redistributable Wi-Fi/BT/GPU firmware from linux-firmware. See [firmware/README.md](firmware/README.md).

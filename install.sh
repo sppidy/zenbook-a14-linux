@@ -7,7 +7,7 @@ source "$HERE/lib/common.sh"
 
 need_root
 load_env
-assert_a14
+"$HERE/scripts/preflight.sh"   # machine/env/config sanity check — aborts on hard failure
 
 cat <<EOF
 
