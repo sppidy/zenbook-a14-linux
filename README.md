@@ -31,7 +31,6 @@ This mirrors a **working** A14 and every stage was checked against that live mac
 | Audio | ✅ | WCD9395 / lpass |
 | USB-C / DisplayPort-alt | ✅ | |
 | **iris HW video codec** | ❌ **blocked** | VPU is TME-locked to the secure/Windows owner; no PAS PD for Linux. **Do not enable** — it hard-resets the SoC. SW video decode is used. See [docs/iris-wall.md](docs/iris-wall.md). |
-| Physical motion sensors (accel/gyro/mag) | ❌ n/a | not fitted — the A14 chassis has no IMU. The only SSC sensor present is the camera-ALS above. |
 
 ## Requirements
 
