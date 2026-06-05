@@ -27,11 +27,11 @@ This mirrors a **working** A14 and every stage was checked against that live mac
 | Keyboard / touchpad | ✅ | |
 | Embedded Controller (fan, profile, kbd backlight) | ✅ | `asus-zenbook-a14-ec` + `hid-asus-ec` |
 | Cameras (OV02C10 RGB + HM1092 IR) | ✅ | qcom camss (X1P42100 support) |
-| Ambient Light Sensor → auto-brightness | ✅ | camera-ALS over SSC; `autobright` daemon |
+| Ambient Light Sensor → auto-brightness | ✅ | ov02c10 camera "color" sensor read over SSC (QMI/QRTR) → `autobright` daemon drives `dp_aux_backlight` (lux + CCT) |
 | Audio | ✅ | WCD9395 / lpass |
 | USB-C / DisplayPort-alt | ✅ | |
 | **iris HW video codec** | ❌ **blocked** | VPU is TME-locked to the secure/Windows owner; no PAS PD for Linux. **Do not enable** — it hard-resets the SoC. SW video decode is used. See [docs/iris-wall.md](docs/iris-wall.md). |
-| SSC physical sensors (accel/gyro/…) | ❌ | none fitted; only camera-ALS |
+| Physical motion sensors (accel/gyro/mag) | ❌ n/a | not fitted — the A14 chassis has no IMU. The only SSC sensor present is the camera-ALS above. |
 
 ## Requirements
 
