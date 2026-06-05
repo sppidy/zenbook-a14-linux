@@ -73,4 +73,12 @@ The installer keeps your existing boot entries and adds the EL2 one as the defau
 
 ## Credits
 
-jglathe (X1E tree), strongtz/Wangao Wang (iris X1P42100), Stephan Gerhold & Linaro (iris no-TZ, qcom upstream, [qebspil](https://github.com/stephan-gh/qebspil)), TravMurav ([slbounce](https://github.com/TravMurav/slbounce)), aarch64-laptops, and the linux-arm-msm community.
+- **jglathe** — X1E `ubuntu-qcom-x1e` tree
+- **strongtz / Wangao Wang** — iris X1P42100
+- **Stephan Gerhold & Linaro** — iris no-TZ, qcom upstream, [qebspil](https://github.com/stephan-gh/qebspil)
+- **TravMurav** — [slbounce](https://github.com/TravMurav/slbounce)
+- **[alexVinarskis](https://github.com/alexVinarskis/linux-x1e80100-zenbook-a14)** — Zenbook A14 Linux work
+- **Sombre-Osmoze** <sombre@osmoze.xyz> — original RA driver, EC reverse-engineering, platform_profile patch, PPD bridge
+- **Alexandru Marc Serdeliuc** <serdeliuk@yahoo.com> — original hid-asus-ec keyboard-backlight driver, QA backlight protocol confirmation
+- **icecream95** — udev-hid-bpf work on Vivobook S15 / Zenbook A14, early EC protocol documentation
+- **aarch64-laptops** and the **linux-arm-msm** community
