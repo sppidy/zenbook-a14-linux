@@ -34,8 +34,8 @@ esac
 # --- environment -------------------------------------------------------------
 command -v systemctl >/dev/null && ok "systemd present" || bad "no systemd — the installer uses systemd-boot + services"
 command -v apt-get   >/dev/null && ok "apt (Debian/Ubuntu)" || warn "no apt — scripts assume Debian/Ubuntu; install build deps + packages yourself"
-miss=""; for t in git make gcc; do command -v "$t" >/dev/null || miss="$miss $t"; done
-[ -z "$miss" ] && ok "base build tools (git/make/gcc)" || warn "missing build tools:$miss (apt: build-essential git)"
+miss=""; for t in git make gcc python3 sha256sum zstd; do command -v "$t" >/dev/null || miss="$miss $t"; done
+[ -z "$miss" ] && ok "base build/firmware tools (git/make/gcc/python3/sha256sum/zstd)" || warn "missing tools:$miss (apt: build-essential git python3 coreutils zstd)"
 miss=""; for t in meson ninja bootctl rsync; do command -v "$t" >/dev/null || miss="$miss $t"; done
 [ -z "$miss" ] && ok "meson/ninja/bootctl/rsync present" || warn "not yet installed:$miss (stages apt-install meson/ninja; bootctl=systemd-boot, rsync=capture)"
 

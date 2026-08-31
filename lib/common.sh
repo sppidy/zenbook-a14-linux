@@ -60,7 +60,18 @@ fw_find() {
 	local name="$1" r f
 	while IFS= read -r r; do
 		[ -d "$r" ] || continue
-		f="$(find "$r" -iname "$name" -type f 2>/dev/null | head -1)"
+		f="$(find "$r" -iname "$name" -type f -print -quit 2>/dev/null)"
+		[ -n "$f" ] && { printf '%s\n' "$f"; return 0; }
+	done < <(fw_roots)
+	return 1
+}
+
+# Find the first firmware file matching a shell-style basename pattern.
+fw_find_glob() {
+	local pattern="$1" r f
+	while IFS= read -r r; do
+		[ -d "$r" ] || continue
+		f="$(find "$r" -iname "$pattern" -type f -print -quit 2>/dev/null)"
 		[ -n "$f" ] && { printf '%s\n' "$f"; return 0; }
 	done < <(fw_roots)
 	return 1
