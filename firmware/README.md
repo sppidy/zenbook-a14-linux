@@ -12,6 +12,14 @@ Listed in [`../config/firmware-manifest.txt`]. `../scripts/01-extract-firmware.s
 - `qcvss8380.mbn` — video (iris; blacklisted but kept)
 - `tcblaunch.exe` — Microsoft DRTM payload (see [`../docs/tcblaunch.md`])
 
+The UX3407QA's WCN6855/WCN6885 Wi-Fi also needs files from the Windows WLAN
+driver: `wlanfw20.mbn`, `m3.bin`, `regdb.bin`, and the matching
+`bdwlan_wcn685x_2p1_*UX3407Q*.elf` board calibration. Stage 01 installs the
+first three under `/lib/firmware/updates/ath11k/WCN6855/hw2.1/` and uses the
+board ELF to patch the redistributable linux-firmware board database for both
+observed QMI chip IDs (2 and 18). The board ELF is device-specific and is not
+stored in this repository.
+
 ### Where to get the blobs — any of these (the extractor searches them all)
 
 Set one or more of `FW_SOURCES` / `DRIVER_DIR` / `BSP_DIR` / `WINDOWS_MOUNT` in `config/install.env`. Each file is found **by name** across every configured source, so they can complement each other.
@@ -29,6 +37,9 @@ Set one or more of `FW_SOURCES` / `DRIVER_DIR` / `BSP_DIR` / `WINDOWS_MOUNT` in 
 
 These are free and ship in [linux-firmware](https://gitlab.com/kernel-firmware/linux-firmware); your distro's `linux-firmware` package provides them (use a recent version):
 
-- Wi-Fi: `ath11k/WCN6855/hw2.1/{board-2.bin,amss.bin,m3.bin,regdb.bin}`
+- Wi-Fi base board database: `ath11k/WCN6855/hw2.0/board-2.bin(.zst)`;
+  Stage 01 patches it with the Windows-derived UX3407Q calibration and writes
+  both raw and compressed overrides. The raw copy is required because the
+  kernel searches all raw firmware paths before compressed fallbacks.
 - Bluetooth: `qca/htbtfw20.tlv`, `qca/hpnv*`
 - GPU: `qcom/gen71500_gmu.bin`, `qcom/gen71500_sqe.fw`

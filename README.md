@@ -23,7 +23,7 @@ This mirrors a **working** A14 and every stage was checked against that live mac
 | CPU / suspend (s2idle) | ✅ | |
 | Display (eDP panel) | ✅ | |
 | GPU (Adreno X1-45) | ✅ | zap shader + GMU firmware |
-| Wi-Fi + Bluetooth (WCN6855) | ✅ | `ath11k` (firmware in linux-firmware) |
+| Wi-Fi + Bluetooth (WCN6855/WCN6885) | ✅ | `ath11k`; Windows WLAN firmware + UX3407Q board calibration required (stage 01) |
 | Keyboard / touchpad | ✅ | |
 | Embedded Controller (fan, profile, kbd backlight) | ✅ | `asus-zenbook-a14-ec` + `hid-asus-ec` |
 | Cameras (OV02C10 RGB + HM1092 IR) | ✅ | qcom camss (X1P42100 support) |
@@ -51,7 +51,7 @@ sudo ./install.sh
 to override the model check on a variant. It then runs, in order:
 
 0. **`scripts/00-build-slbounce.sh`** — pulls + builds the `slbounce` + `qebspil` EFI drivers into `config/slbounce/`. See [docs/el2-boot.md](docs/el2-boot.md).
-1. **`scripts/01-extract-firmware.sh`** — extracts the proprietary firmware from your Windows / official driver folder into `/lib/firmware/updates/…` (and the DSP blobs onto the ESP), and checks the redistributable Wi-Fi/BT/GPU firmware from linux-firmware. See [firmware/README.md](firmware/README.md).
+1. **`scripts/01-extract-firmware.sh`** — extracts the proprietary firmware from your Windows / official driver folder into `/lib/firmware/updates/…` (and the DSP blobs onto the ESP), patches the Wi-Fi board database for UX3407Q, and checks the redistributable Bluetooth/GPU firmware from linux-firmware. See [firmware/README.md](firmware/README.md).
 2. **`scripts/02-install-kernel.sh`** — clones + builds the kernel branch with `config/kernel.config`, runs `modules_install`.
 3. **`scripts/03-setup-el2-boot.sh`** — installs the built drivers + `tcblaunch.exe`, the EL2 device tree, and the systemd-boot entry.
 4. **`scripts/04-apply-config.sh`** — iris blacklist, kernel cmdline, optional `autobright` ALS daemon.
@@ -65,7 +65,7 @@ You can run each step on its own; they're idempotent. Edit `config/install.env` 
 
 ## Firmware & licensing — read this
 
-The proprietary Qualcomm DSP/GPU/video firmware (`qcadsp8380.mbn`, `qccdsp8380.mbn`, `qcdxkmsucpurwa.mbn`, `qcvss8380.mbn`, the `*_dtbs.elf`) and Microsoft's `tcblaunch.exe` are **licensed to the device** and **may not be redistributed**. They are **not** in this repo. `01-extract-firmware.sh` pulls them from *your own* Windows install (the same files Windows already ships), the way the [aarch64-laptops](https://github.com/aarch64-laptops/build) project does. The Wi-Fi/BT (`ath11k` WCN6855, `qca/htbtfw20.tlv`) and GPU (`gen71500_*`) firmware **is** freely redistributable (it's in [linux-firmware](https://gitlab.com/kernel-firmware/linux-firmware)) and is installed from there.
+The proprietary Qualcomm DSP/GPU/video firmware (`qcadsp8380.mbn`, `qccdsp8380.mbn`, `qcdxkmsucpurwa.mbn`, `qcvss8380.mbn`, the `*_dtbs.elf`), UX3407Q Wi-Fi firmware/calibration, and Microsoft's `tcblaunch.exe` are **licensed to the device** and **may not be redistributed**. They are **not** in this repo. `01-extract-firmware.sh` pulls them from *your own* Windows install (the same files Windows already ships), the way the [aarch64-laptops](https://github.com/aarch64-laptops/build) project does. The base `ath11k` board database, Bluetooth firmware (`qca/htbtfw20.tlv`), and GPU firmware (`gen71500_*`) are freely redistributable in [linux-firmware](https://gitlab.com/kernel-firmware/linux-firmware); stage 01 adds the device-specific Wi-Fi board entry locally.
 
 ## Recovery
 
